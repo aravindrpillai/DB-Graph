@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GW Data Graph</title>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.0/jquery.min.js"></script>
+    <script src="tree.js"></script>
+    <link rel="stylesheet" href="treejs.css" id="treejs_styles">
+    <style media="screen">
+      body {
+        padding: 0;
+        margin: 0;
+        font-family: sans-serif;
+      }
+
+      header h1 {
+        text-align: center;
+        font-size: 2rem;
+        color: #fff;
+      }
+
+      .split {
+        height: 80%;
+        width: 50%;
+        position: fixed;
+        z-index: 1;
+        top: 10%;
+        overflow-x: hidden;
+        padding-top: 20px;
+      }
+
+      .left {
+        left: 0;
+      }
+
+      .right {
+        right: 0;
+      }
+
+      header {
+        padding: 2px;
+        margin-bottom: 1em;
+        background-color: #159957;
+        background-image: -webkit-linear-gradient(30deg, #155799, #159957);
+        background-image: -o-linear-gradient(30deg, #155799, #159957);
+        background-image: linear-gradient(120deg, #155799, #159957);
+      }
+
+      main {
+        margin: 0 1em;
+        text-align: center;
+      }
+
+      #container {
+        width: 100%;
+        border: 1px solid #ccc;
+        margin: 0 auto;
+        margin-bottom: 1em;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Guidewire Data Graph</h1>
+    </header>
+    <main>
+	  <input type="text" value="AlexaRequestBook" id="tableNameField"> <button onClick="fetchRootTableData()">Fetch</button>
+	  <input type="checkbox" id="showOnlyForiegnKeys" onClick="handleCheckboxAction()" checked/> Show Only relations<br>
+	  Open chrome like this-- > goto C:\Program Files\Google\Chrome\Application> --> chrome.exe --user-data-dir="C://Chrome dev session" --disable-web-security
+      <div id="container"></div>
+    </main>
+    <script>
+
+
+	var map = new Map();
+	var mapCount = 0;
+	var triggeredIds = new Set(); 
+	var checked = $("#showOnlyForiegnKeys").is(":checked");
+	
+      //n3.setEnabled(true);
+	function fetchRootTableData(){
+		var rootTable = $("#tableNameField").val();
+		map = new Map();
+		mapCount = 0;
+		triggeredIds = new Set(); 
+		
+		$.ajax({
+			headers: { 
+				'Content-Type': 'application/json'
+			},
+			url:"http://localhost:8080/cc/rest/DataGraph/FetchTableInfo",
+			type:"POST",
+			data:"{\"tableName\":\""+rootTable+"\"}",
+			success:function(data){
+				var mydata = JSON.parse(JSON.stringify(data));
+				console.log(mydata);
+				console.log("entity name : ",data.tableName);
+				
+				var root = new TreeNode(data.tableName);
+				map.set(mapCount++, root);
+				triggeredIds.add(0);
+				
+				data.columns.forEach(function (item, index) {
+					if(checked){
+						if(item.isThisColumnAReference){
+							var className = (item.isThisColumnAReference === true) ? "reference-column" : "normal-column";
+							var onClick = (item.isThisColumnAReference === true) ? 'fetchTableInfo(\"'+item.referenceName+'\",'+mapCount+')' : "";
+							var field = '<a class="'+className+'" onClick=\''+onClick+'\'>'+item.name+'</a>';
+							var node = new TreeNode(field);
+							map.set(mapCount++, node);
+							root.addChild(node);
+						}
+					}else{
+						var className = (item.isThisColumnAReference === true) ? "reference-column" : "normal-column";
+						var onClick = (item.isThisColumnAReference === true) ? 'fetchTableInfo(\"'+item.referenceName+'\",'+mapCount+')' : "";
+						var field = '<a class="'+className+'" onClick=\''+onClick+'\'>'+item.name+'</a>';
+						var node = new TreeNode(field);
+						map.set(mapCount++, node);
+						root.addChild(node);
+					}
+				});
+				var view = new TreeView(root, "#container");
+			},
+			error:function(data){
+				alert("Error : "+data.responseText);
+			}
+		});
+		
+	}
+     
+	  
+	
+	function fetchTableInfo(tableName, selectedMapIndex){
+		if(triggeredIds.has(selectedMapIndex)){
+			console.log("Already Triggred");
+			return
+		}
+		console.log("Fetch Data post Root : ",tableName, selectedMapIndex)
+		$.ajax({
+			headers: { 
+				'Content-Type': 'application/json'
+			},
+			url:"http://localhost:8080/cc/rest/DataGraph/FetchTableInfo",
+			type:"POST",
+			data:"{\"tableName\":\""+tableName+"\"}",
+			success:function(data){
+				console.log(data);
+				var mydata = JSON.parse(JSON.stringify(data));
+				console.log(mydata);
+				console.log("entity name : ",data.tableName);
+				
+				var selectedNode = map.get(selectedMapIndex);
+				data.columns.forEach(function (item, index) {
+					if(checked){
+						if(item.isThisColumnAReference){
+							var className = (item.isThisColumnAReference === true) ? "reference-column" : "normal-column";
+							var onClick = (item.isThisColumnAReference === true) ? 'fetchTableInfo(\"'+item.referenceName+'\",'+mapCount+')' : "";
+							var field = '<a class="'+className+'" onClick=\''+onClick+'\'>'+item.name+'</a>';
+							var node = new TreeNode(field);
+							map.set(mapCount++, node);
+							selectedNode.addChild(node);
+							triggeredIds.add(selectedMapIndex);
+						}
+					}else{
+						var className = (item.isThisColumnAReference === true) ? "reference-column" : "normal-column";
+						var onClick = (item.isThisColumnAReference === true) ? 'fetchTableInfo(\"'+item.referenceName+'\",'+mapCount+')' : "";
+						var field = '<a class="'+className+'" onClick=\''+onClick+'\'>'+item.name+'</a>';
+						var node = new TreeNode(field);
+						map.set(mapCount++, node);
+						selectedNode.addChild(node);
+						triggeredIds.add(selectedMapIndex);
+					}
+				});
+				var view = new TreeView(map.get(0), "#container");
+			},
+			error:function(data){
+				alert("Error : "+data.responseText);
+			}
+		});
+	}
+	
+	function handleCheckboxAction(){
+		checked = $("#showOnlyForiegnKeys").is(":checked");
+		fetchRootTableData();
+	}
+    </script>
+  </body>
+</html>
